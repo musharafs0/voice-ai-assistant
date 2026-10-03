@@ -5,9 +5,13 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 from backend.auth import (create_access_token,verify_access_token,security)
 from fastapi.security import HTTPAuthorizationCredentials
+from backend.mongodb import chat_collection, get_chat_history
+from datetime import datetime, timezone
 
 from backend import models
 from backend.database import Base, engine, get_db
+from backend.llm import get_ai_response
+
 
 
 Base.metadata.create_all(bind=engine)
@@ -42,16 +46,30 @@ def chat(
 
     db_user = db.get(models.User, user_id)
 
+
     if db_user is None:
         raise HTTPException(
             status_code=401,
             detail="User not found"
         )
+    
+    history = get_chat_history(db_user.id)
+
+    ai_response = get_ai_response(message=request.message,history=history)
+
+    chat_collection.insert_one({
+    "user_id": db_user.id,
+    "message": request.message,
+    "response": ai_response,
+    "created_at": datetime.now(timezone.utc)
+    })
+
+    
 
     return {
         "user_id": db_user.id,
         "message": request.message,
-        "response": "AI will be connected next"
+        "response": ai_response
     }
 
 
